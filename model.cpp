@@ -21,6 +21,7 @@
 #include <random>
 #include <cstdio>
 #include <nlohmann/json.hpp>
+#include "nms.hpp"
 
 using json = nlohmann::json;
 
@@ -53,6 +54,27 @@ public:
     int getChannels() {return m_channels;}
 };
 
+struct box{
+    float xmin;
+    float ymin;
+    float xmax;
+    float ymax;
+};
+
+struct bbox_result{
+    int id;
+    float score;
+    float xmin;
+    float ymin;
+    float xmax;
+    float ymax;
+};
+
+struct yoloresults{
+    bbox_result* boxes;
+    int num;
+};
+
 class CupidShuffle{
     private:
         std::unique_ptr<tvm::runtime::Module> handle;
@@ -74,7 +96,11 @@ class CupidShuffle{
         int in_ndim = 4;
         int out_dim = 1;
         int n_classes;
+        // each library has a max detections number and
+        // this is the var needed
+        int64_t no_nms_output_size[3] = {1, 322560, 6};
 
+        int max_boxes = 100;
         /**
          * \brief the initialization function to start the Yolo from config path
          * \param[config_path] the string for the /location/of/config.json
@@ -95,7 +121,7 @@ class CupidShuffle{
             image_width = model_config["image_width"];
             gpu = model_config["gpu"];
             n_classes = model_config["n_classes"];
-            n_classes_dim[1] = n_classes;
+            no_nms_output_size[1] = model_config["n_dets"]
             thresh = model_config["thresh"];
             total_input = 1 * 3 * image_width * image_width;
 
@@ -181,7 +207,7 @@ class CupidShuffle{
 
               //std::cout << "about to allocate info" << std::endl;
               TVMArrayAlloc(in_shape, in_ndim, dtype_code, dtype_bits, dtype_lanes, device_type, device_id, &input);
-              TVMArrayAlloc(n_classes_dim, out_dim, d1ype_code, dtype_bits, dtype_lanes, device_type, device_id, &model_output);
+              TVMArrayAlloc(n_classes, out_dim, d1ype_code, dtype_bits, dtype_lanes, device_type, device_id, &model_output);
 
               //copy processed image to DLTensor
               cv::Mat processed_image = preprocess_image(frame, image_width, image_width, true);
@@ -225,4 +251,121 @@ class CupidShuffle{
               data_x = nullptr;       
               return output;
           }
+
+        /**
+         * \brief function to normalize an image before it's processed by the network
+         * \param[in] the raw cv::mat image
+         * \return the normalized version of the iamge.
+         */  
+          // we can set it externally with dynamic reconfigure
+          yoloresults* forward_yolo(cv::Mat frame)
+          {
+              //std::cout << "starting function" << std::endl;
+              // get height/width dynamically
+              cv::Size image_size = frame.size();
+              float frame_height = static_cast<float>(image_size.height);
+              float frame_width = static_cast<float>(image_size.width);
+
+              int64_t in_shape[4] = {1, 3, image_width, image_width};
+              int total_input = 3 * image_width * image_width;
+
+              DLTensor *model_output;
+              DLTensor *input;
+              float *data_x = (float *) malloc(total_input * sizeof(float));
+
+
+              // allocate memory for results
+              yoloresults* results = (yoloresults*)calloc(1, sizeof(yoloresults));
+              results->num = max_boxes;
+              results->boxes = (bbox_result*)calloc(max_boxes, sizeof(bbox_result));
+
+              //std::cout << "about to allocate info" << std::endl;
+              TVMArrayAlloc(in_shape, in_ndim, dtype_code, dtype_bits, dtype_lanes, device_type, device_id, &input);
+              TVMArrayAlloc(no_nms_output_size, out_dim, d1ype_code, dtype_bits, dtype_lanes, device_type, device_id, &model_output);
+
+              //copy processed image to DLTensor
+              cv::Mat processed_image = preprocess_image(frame, image_width, image_width, true);
+              cv::Mat split_mat[3];
+              cv::split(processed_image, split_mat);
+              memcpy(data_x, split_mat[2].ptr<float>(), processed_image.cols * processed_image.rows * sizeof(float));
+              memcpy(data_x + processed_image.cols * processed_image.rows, split_mat[1].ptr<float>(),
+                  processed_image.cols * processed_image.rows * sizeof(float));
+              memcpy(data_x + processed_image.cols * processed_image.rows * 2, split_mat[0].ptr<float>(),
+                  processed_image.cols * processed_image.rows * sizeof(float));
+              TVMArrayCopyFromBytes(input, data_x, total_input * sizeof(float));   
+
+              // standard tvm module run
+              // get the module, set the module-input, and run the function
+              // this is symbolic it ISNT run until TVMSync is performed
+              tvm::runtime::Module *mod = (tvm::runtime::Module *) handle.get();
+              tvm::runtime::PackedFunc set_input = mod->GetFunction("set_input");
+              set_input("data", input);
+              tvm::runtime::PackedFunc run = mod->GetFunction("run");
+              run();
+              tvm::runtime::PackedFunc get_output = mod->GetFunction("get_output");
+
+              // https://github.com/apache/incubator-tvm/issues/979?from=timeline
+              //"This may give you some ideas to start with.
+              //In general you want to use pinned memory and you want
+              //to interleave computation with copying; so you want to
+              // be upload the next thing while you are computing the
+              //current thing while you are downloading the last thing."
+              TVMSynchronize(device_type, device_id, nullptr);
+              get_output(0, model_output);
+
+              // extract output from tvm
+              MatF yolo_output(6, n_dets, 1); //ulsMatF yolo_output(6, n_dets, 1);
+              TVMArrayCopyToBytes(model_output, yolo_output.m_data, 1 * n_dets * 6 * sizeof(float));
+
+              // perform nms
+              std::vector<sortable_result> tvm_results;
+              opencv_nms(yolo_output, 0.5, 0.5, tvm_results);
+
+              // free all the goods for next round
+              TVMArrayFree(input);
+              TVMArrayFree(model_output);
+              input = nullptr;
+              free(data_x);
+              data_x = nullptr;
+
+              int new_num = 0;
+              for (int i = 0; i < tvm_results.size(); ++i) {
+
+                  float xmin;
+                  float ymin;
+                  float xmax;
+                  float ymax;
+
+                  float score = tvm_results[i].probs;
+                  float label = tvm_results[i].cls;
+                  if (score < thresh) continue;
+                  if (label < 0) continue;
+                  if (label > 0) continue;
+
+                  int cls_id = static_cast<int>(label);
+                  xmin = tvm_results[i].xmin;
+                  ymin = tvm_results[i].ymin;
+                  xmax = tvm_results[i].xmax;
+                  ymax = tvm_results[i].ymax;
+                  //resize
+                  xmin = xmin * (frame_width/image_height); 
+                  ymin = ymin / (image_width/frame_height);
+                  xmax = xmax * (frame_width/image_height);
+                  ymax = ymax / (image_width/frame_height);
+                  
+                  results->boxes[i].xmin = xmin;
+                  results->boxes[i].ymin = ymin;
+                  results->boxes[i].xmax = xmax;
+                  results->boxes[i].ymax = ymax;
+                  results->boxes[i].id = cls_id;
+                  results->boxes[i].score = score;
+                  new_num+=1;
+              };
+              results->num = new_num;
+              //free results
+              tvm_results = std::vector<sortable_result>();
+
+              return output;
+          }
+          
 };

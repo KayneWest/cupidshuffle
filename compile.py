@@ -45,7 +45,7 @@ class TVMCompiler:
         n_trial: int =  2000,
         early_stopping: int =  600,
         use_transfer_learning: bool =  True, # this failed?
-        try_winograd: bool =  True,
+        thresh: float = 0.5,
         measure_option: Any = autotvm.measure_option(
             builder=autotvm.LocalBuilder(timeout=10),
             runner=autotvm.LocalRunner(
@@ -71,8 +71,9 @@ class TVMCompiler:
         self.n_trial = n_trial
         self.early_stopping = early_stopping
         self.use_transfer_learning: use_transfer_learning
-        self.try_winograd: try_winograd
+        self.thresh: thresh
         self.measure_option: measure_option
+
 
         # https://docs.tvm.ai/tutorials/autotvm/tune_nnvm_cuda.html#scale-up-measurement-by-using-multiple-devices
         #self.measure_option = autotvm.measure_option(
@@ -143,7 +144,8 @@ class TVMCompiler:
           "device_id": 0,
           "width": self.width,
           "height" self.height,
-          "gpu": False
+          "gpu": False,
+          "tresh": thresh
         }
         with open(f"cpp.json") as fo:
           json.dump(cpp_params, fo)
