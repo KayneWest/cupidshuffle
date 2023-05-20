@@ -295,33 +295,11 @@ class TVMCompiler:
             print("exported")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--network', type=str, default='nonms_object_detector', help='Network Architecture')
-    parser.add_argument('--target', type=str, default='cuda', help='Deploy Target')
-    parser.add_argument('--board', type=str, default='titanx', help='board')
-    parser.add_argument('--dtype', type=str, default='float32', help='Data Type')
-    parser.add_argument('--tune', type=int, default=0, help='whether to tune the models for the current arch')
-    parser.add_argument('--ctx', type=int, default=0, help='TVM')
-    parser.add_argument('--cc', type=str, default=None, help='if on x86, use "aarch64-linux-gnu-g++" to compile for aarch64 - might not work')
-    parser.add_argument('--n_trial', type=int, default=2000, help='TVM')
-    parser.add_argument('--quantization', type=bool, default=False, help='TVM')
-    parser.add_argument('--custom_savename', type=str, default=None, help='TVM')
-    parser.add_argument('--profile_speed', type=int, default=0, help='TVM')
-    parser.add_argument('--profile_speed_name', type=str, default=None, help='TVM')
-    parser.add_argument('--opt_level', type=int, default=3, help='TVM')
-    parser.add_argument('--early_stopping', type=int, default=600, help='TVM') 
-    parser.add_argument('--rpc', type=int, default=2, help='TVM')
-    parser.add_argument('--override-shape', type=int, default=0, help='TVM')
-    parser.add_argument('--override-width', type=int, default=0, help='TVM')
-    parser.add_argument('--override-height', type=int, default=0, help='TVM')
-    parser.add_argument('--best_weights_path', type=str, default=0, help='TVM')
-    
-    args = parser.parse_args()
 
     net = CupidShuffle(start_channels=28, token_dim=28, repeats=[1,4,1])
     # load our weights
     net.load_state_dict(torch.load(args.best_weights_path))
-
+    # load our compiler
     compiler = TVMCompiler(
         height = 224, 
         width = 224, 
@@ -333,8 +311,8 @@ if __name__ == '__main__':
         graph_opt_sch_file  = 'cupidshufflenet_tvm_graph_opt.log',
         tuner =  'xgb',
         n_trial =  2000,
-        early_stopping =  600,
-        use_transfer_learning =  True, # this failed?
+        early_stopping =  None,
+        use_transfer_learning =  True,
         try_winograd =  True,
         measure_option = autotvm.measure_option(
             builder=autotvm.LocalBuilder(timeout=10),
@@ -344,7 +322,7 @@ if __name__ == '__main__':
               )
             ),
         )
-
+    # export our model
     compiler.export(net, True)
     # compiler.tune_and_evaluate()
 
