@@ -1,4 +1,10 @@
 
+"""
+code credit:
+https://github.com/weiaicunzai/pytorch-cifar100/blob/master/models/shufflenetv2.py
+https://github.com/mulinmeng/Shuffle-Transformer
+
+"""
 
 
 
@@ -23,13 +29,6 @@ from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import torch
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-
-from conf import settings
-from utils import get_network, get_test_dataloader
 
 def channel_split(x, split):
     """split a tensor into two pieces along channel dimension
@@ -242,7 +241,7 @@ class ShuffleUnit(nn.Module):
         x = channel_shuffle(x, 2)
         return x
 
-class CupidShuffleNet(nn.Module):
+class CupidShuffle(nn.Module):
 
     def __init__(self, ratio=1, start_channels = 24, class_num=100, use_block=True, repeats=[3, 7, 3], token_dim=32, embed_dim=96, has_pos_embed=False):
         super().__init__()

@@ -3,7 +3,6 @@ training code taken from
 https://github.com/weiaicunzai/pytorch-cifar100/blob/master/train.py
 
 """
-
 import os
 import sys
 import argparse
@@ -21,8 +20,10 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from conf import settings
-from utils import get_network, get_training_dataloader, get_test_dataloader, WarmUpLR, \
+from utils import get_training_dataloader, get_test_dataloader, WarmUpLR, \
     most_recent_folder, most_recent_weights, last_epoch, best_acc_weights
+
+from model import CupidShuffle
 
 def train(epoch, tb):
     start = time.time()
@@ -131,7 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('-tensorboard', default=False)
     args = parser.parse_args()
 
-    net = CupidShuffleNet(start_channels=28, token_dim=28, repeats=[1,4,1])
+    net = CupidShuffle(start_channels=28, token_dim=28, repeats=[1,4,1])
 
     best_weights_path = None
     tb = args.tensorboard

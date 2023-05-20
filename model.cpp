@@ -23,6 +23,7 @@
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
+
 class MatF{
 public:
     float* m_data;
@@ -101,7 +102,6 @@ class CupidShuffle{
             std::string detector_deploy_lib_path = detector_lib_path;
             std::string detector_deploy_graph_path = detector_graph_path;
             std::string detector_deploy_param_path = detector_param_path;
-
 
             if (gpu){
                 device_type = kDLGPU;
