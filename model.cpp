@@ -55,7 +55,7 @@ public:
 
 class CupidShuffle{
     private:
-        std::unique_ptr<tvm::runtime::Module> detector_handle;
+        std::unique_ptr<tvm::runtime::Module> handle;
         std::unique_ptr<tvm::runtime::Module> pose_handle;
 
     public:
@@ -70,7 +70,7 @@ class CupidShuffle{
         int device_type = kDLGPU;
         int image_width;
         int image_width;
-        int detector_total_input;
+        int total_input;
         int in_ndim = 4;
         int out_dim = 1;
         int n_classes;
@@ -86,9 +86,9 @@ class CupidShuffle{
             std::ifstream json_read(config_path);
             json_read >> model_config;
             // read detector variables
-            std::string detector_lib_path = model_config["detector_deploy_lib_path"];
-            std::string detector_graph_path = model_config["detector_deploy_graph_path"];
-            std::string detector_param_path = model_config["detector_deploy_param_path"];
+            std::string lib_path = model_config["deploy_lib_path"];
+            std::string graph_path = model_config["deploy_graph_path"];
+            std::string param_path = model_config["deploy_param_path"];
 
             device_id = model_config["device_id"];
             image_width = model_config["image_width"];
@@ -97,11 +97,11 @@ class CupidShuffle{
             n_classes = model_config["n_classes"];
             n_classes_dim[1] = n_classes;
             thresh = model_config["thresh"];
-            detector_total_input = 1 * 3 * image_width * image_width;
+            total_input = 1 * 3 * image_width * image_width;
 
-            std::string detector_deploy_lib_path = detector_lib_path;
-            std::string detector_deploy_graph_path = detector_graph_path;
-            std::string detector_deploy_param_path = detector_param_path;
+            std::string deploy_lib_path = lib_path;
+            std::string deploy_graph_path = graph_path;
+            std::string deploy_param_path = param_path;
 
             if (gpu){
                 device_type = kDLGPU;
@@ -110,25 +110,25 @@ class CupidShuffle{
             }
             // DETECTOR READ
             // read deploy lib
-            tvm::runtime::Module detector_mod_syslib = tvm::runtime::Module::LoadFromFile(detector_deploy_lib_path);
+            tvm::runtime::Module mod_syslib = tvm::runtime::Module::LoadFromFile(deploy_lib_path);
             // read deplpy json
-            std::ifstream detector_json_in(detector_deploy_graph_path, std::ios::in);
-            std::string detector_json_data((std::istreambuf_iterator<char>(detector_json_in)), std::istreambuf_iterator<char>());
-            detector_json_in.close();
+            std::ifstream json_in(deploy_graph_path, std::ios::in);
+            std::string json_data((std::istreambuf_iterator<char>(json_in)), std::istreambuf_iterator<char>());
+            json_in.close();
             // get global function module for graph runtime
-            tvm::runtime::Module detector_mod = (*tvm::runtime::Registry::Get("tvm.graph_runtime.create"))(detector_json_data, detector_mod_syslib,
+            tvm::runtime::Module mod = (*tvm::runtime::Registry::Get("tvm.graph_runtime.create"))(json_data, mod_syslib,
                                                                                                 device_type, device_id);
-            this->detector_handle.reset(new tvm::runtime::Module(detector_mod));
+            this->handle.reset(new tvm::runtime::Module(mod));
             // parameters in binary
-            std::ifstream detector_params_in(detector_deploy_param_path, std::ios::binary);
-            std::string detector_params_data((std::istreambuf_iterator<char>(detector_params_in)), std::istreambuf_iterator<char>());
-            detector_params_in.close();
+            std::ifstream params_in(deploy_param_path, std::ios::binary);
+            std::string params_data((std::istreambuf_iterator<char>(params_in)), std::istreambuf_iterator<char>());
+            params_in.close();
             // parameters need to be TVMByteArray type to indicate the binary data
-            TVMByteArray detector_params_arr;
-            detector_params_arr.data = detector_params_data.c_str();
-            detector_params_arr.size = detector_params_data.length();
-            tvm::runtime::PackedFunc detector_load_params = detector_mod.GetFunction("load_params");
-            detector_load_params(detector_params_arr);
+            TVMByteArray params_arr;
+            params_arr.data = params_data.c_str();
+            params_arr.size = params_data.length();
+            tvm::runtime::PackedFunc load_params = mod.GetFunction("load_params");
+            load_params(params_arr);
         }
     
         /**
@@ -197,7 +197,7 @@ class CupidShuffle{
               // standard tvm module run
               // get the module, set the module-input, and run the function
               // this is symbolic it ISNT run until TVMSync is performed
-              tvm::runtime::Module *mod = (tvm::runtime::Module *) detector_handle.get();
+              tvm::runtime::Module *mod = (tvm::runtime::Module *) handle.get();
               tvm::runtime::PackedFunc set_input = mod->GetFunction("set_input");
               set_input("data", input);
               tvm::runtime::PackedFunc run = mod->GetFunction("run");

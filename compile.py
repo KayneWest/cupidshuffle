@@ -7,6 +7,7 @@ import os
 import argparse
 import tempfile
 import logging
+import json
 from time import time
 from typing import Dict, Tuple, Any, Optional, Union
 
@@ -134,6 +135,19 @@ class TVMCompiler:
             fo.write(lib.get_graph_json())
         with open(f"{self.save_path}.params") as fo:
             fo.write(relay.save_param_dict(lib.get_params()))
+
+        cpp_params = {
+          "deploy_lib_path": f"{self.save_path}.so",
+          "deploy_graph_path": f"{self.save_path}.json",
+          "deploy_param_path": f"{self.save_path}.params"),
+          "device_id": 0,
+          "width": self.width,
+          "height" self.height,
+          "gpu": False
+        }
+        with open(f"cpp.json") as fo:
+          json.dump(cpp_params, fo)
+
 
     def tvm_compile(
         self, 
@@ -298,14 +312,14 @@ if __name__ == '__main__':
 
     net = CupidShuffle(start_channels=28, token_dim=28, repeats=[1,4,1])
     # load our weights
-    net.load_state_dict(torch.load(args.best_weights_path))
+    net.load_state_dict(torch.load("weights/cupidshuffle.pth"))
     # load our compiler
     compiler = TVMCompiler(
         height = 224, 
         width = 224, 
         input_name = "input0",
         dtype = "float32",
-        target = 'llvm', # llvm -device=arm_cpu -mtriple=aarch64-linux-gnu
+        target = 'llvm', # for arm llvm -device=arm_cpu -mtriple=aarch64-linux-gnu
         save_path = 'cupidshufflenet_tvm',
         log_filename = 'cupidshufflenet_tvm.log',
         graph_opt_sch_file  = 'cupidshufflenet_tvm_graph_opt.log',
