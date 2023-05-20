@@ -132,7 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('-tensorboard', default=False)
     args = parser.parse_args()
 
-    net = CupidShuffle(start_channels=28, token_dim=28, repeats=[1,4,1])
+    net = CupidShuffle(start_channels=28, token_dim=28, repeats=[1, 4, 1])
 
     best_weights_path = None
     tb = args.tensorboard
