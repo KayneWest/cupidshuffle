@@ -73,6 +73,7 @@ class TVMCompiler:
         self.use_transfer_learning: use_transfer_learning
         self.thresh: thresh
         self.measure_option: measure_option
+        
 
 
         # https://docs.tvm.ai/tutorials/autotvm/tune_nnvm_cuda.html#scale-up-measurement-by-using-multiple-devices
@@ -109,6 +110,7 @@ class TVMCompiler:
         # trace model   
         scripted_model = torch.jit.trace(model, input_data).eval()
         # create a relay
+        shape_list = [(self.input_name, input_data.shape)]
         mod, params = relay.frontend.from_pytorch(scripted_model, shape_list)
         if save_mods:
           self.mod = mod
@@ -131,12 +133,14 @@ class TVMCompiler:
         mod, params = self.relay(model)
         # compile the model 
         lib = tvm_compile(mod, params)
+        # export model
         lib.export_library(f"{self.save_path}.so")
         with open(f"{self.save_path}.json") as fo:
             fo.write(lib.get_graph_json())
         with open(f"{self.save_path}.params") as fo:
             fo.write(relay.save_param_dict(lib.get_params()))
 
+        # add whatever else you want here
         cpp_params = {
           "deploy_lib_path": f"{self.save_path}.so",
           "deploy_graph_path": f"{self.save_path}.json",
