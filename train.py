@@ -121,7 +121,7 @@ def eval_training(epoch=0, tb=False):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-net', type=str, default='cupidshuffle' required=False, help='net type')
+    parser.add_argument('-net', type=str, default='cupidshuffle', required=False, help='net type')
     parser.add_argument('-gpu', action='store_true', default=True, help='use gpu or not')
     parser.add_argument('-b', type=int, default=128, help='batch size for dataloader')
     parser.add_argument('-warm', type=int, default=1, help='warm up training phase')
@@ -273,6 +273,4 @@ if __name__ == '__main__':
     print("Top 1 err: ", 1 - correct_1 / len(cifar100_test_loader.dataset))
     print("Top 5 err: ", 1 - correct_5 / len(cifar100_test_loader.dataset))
     print("Parameter numbers: {}".format(sum(p.numel() for p in net.parameters())))
-
-
 

@@ -1,0 +1,27 @@
+.DS_Store
+._.DS_Store
+*.data*
+*.o
+*.mp4
+*.bag
+*.avi
+.idea/
+*.iml
+venv/
+*__pycach__*
+*.pkl_memoize_py3*
+*.tmp*
+*tvm_models/*.json
+*tvm_models/*.params
+*tvm_models/*.so
+*tvm_models/models/*.json
+*tvm_models/models/*.params
+*tvm_models/models/*.so
+# Emacs temp files
+*compile2*
+*dog.jpg*
+*_tvmdbg_ctx_GPU_0*
+*tvm_models/main.cpp*
+*~
+*__pycache__*
+*checkpoint*

@@ -205,7 +205,7 @@ class CupidShuffle{
               DLTensor *input;
               float *data_x = (float *) malloc(total_input * sizeof(float));
 
-              //std::cout << "about to allocate info" << std::endl;
+              // allocate memory for data
               TVMArrayAlloc(in_shape, in_ndim, dtype_code, dtype_bits, dtype_lanes, device_type, device_id, &input);
               TVMArrayAlloc(n_classes, out_dim, d1ype_code, dtype_bits, dtype_lanes, device_type, device_id, &model_output);
 
@@ -279,7 +279,7 @@ class CupidShuffle{
               results->num = max_boxes;
               results->boxes = (bbox_result*)calloc(max_boxes, sizeof(bbox_result));
 
-              //std::cout << "about to allocate info" << std::endl;
+              // allocate memory for data
               TVMArrayAlloc(in_shape, in_ndim, dtype_code, dtype_bits, dtype_lanes, device_type, device_id, &input);
               TVMArrayAlloc(no_nms_output_size, out_dim, d1ype_code, dtype_bits, dtype_lanes, device_type, device_id, &model_output);
 
