@@ -192,6 +192,7 @@ class TVMCompiler:
             )
         return lib
 
+    #TODO fix this func
     def tune_graph(
         self,
         graph: Function, 
@@ -211,7 +212,7 @@ class TVMCompiler:
         target_op = [relay.op.get("nn.conv2d"),]
         Tuner = DPTuner if use_DP else PBQPTuner
         executor = Tuner(graph, {'data': self.input_shape}, self.log_filename, target_op, self.target)
-        # executor.benchmark_layout_transform(min_exec_num=self.n_trial)
+        executor.benchmark_layout_transform(min_exec_num=self.n_trial)
         executor.run()
         executor.write_opt_sch2record_file(self.graph_opt_sch_file)
 
