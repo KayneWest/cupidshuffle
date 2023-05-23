@@ -6,6 +6,24 @@ Down, down, do your dance, do your dance
 # Repo for the Down, down, do your dance, do your dance: CupidShuffle paper
 paper located in memes folder
 
+# Setup
+
+The following works on Ubuntu 20.04 : 
+
+    conda create --name cupidshuffle python=3.7
+    conda activate cupidshuffle
+
+per https://pytorch.org/get-started/locally/
+
+    conda install pytorch torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
+
+and lastly
+
+    python -m pip install numpy tensorboard einops timm
+
+Now you should be able to run the following
+
+
 # Training
 
 ```bash
