@@ -50,15 +50,14 @@ compiler = TVMCompiler(
     width = 224, 
     input_name = "input0",
     dtype = "float32",
-    target = 'llvm', # llvm -device=arm_cpu -mtriple=aarch64-linux-gnu
+    target = 'llvm', # for arm llvm -device=arm_cpu -mtriple=aarch64-linux-gnu
     save_path = 'cupidshufflenet_tvm',
     log_filename = 'cupidshufflenet_tvm.log',
     graph_opt_sch_file  = 'cupidshufflenet_tvm_graph_opt.log',
     tuner =  'xgb',
-    n_trial =  2000,
+    n_trial =  10,
     early_stopping =  None,
     use_transfer_learning =  True,
-    try_winograd =  True,
     measure_option = autotvm.measure_option(
         builder=autotvm.LocalBuilder(timeout=10),
         runner=autotvm.LocalRunner(
