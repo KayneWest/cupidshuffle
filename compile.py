@@ -26,13 +26,15 @@ from tvm.relay.function import Function
 from tvm.autotvm.task.task import Task
 from tvm.autotvm.measure.measure_methods import set_cuda_target_arch
 
-from models import CupidShuffle
+from model import CupidShuffle
 
 logging.getLogger('autotvm').setLevel(logging.DEBUG)
 
-
 class TVMCompiler:
-    def __init__(self
+    def __init__(
+        self,
+        batch_size: int = 1,
+        channels: int = 3,
         height: int = 224, 
         width: int = 224, 
         input_name: str = "input0",
@@ -46,15 +48,17 @@ class TVMCompiler:
         early_stopping: int =  600,
         use_transfer_learning: bool =  True, # this failed?
         thresh: float = 0.5,
+        gpu: bool = False,
         measure_option: Any = autotvm.measure_option(
             builder=autotvm.LocalBuilder(timeout=10),
             runner=autotvm.LocalRunner(
               number=20, repeat=3, timeout=4, 
-              min_repeat_ms=150, enable_cpu_cache_flush=True
+              min_repeat_ms=150, enable_cpu_cache_flush=True 
               )
             ),
     ) -> None:
         """
+        TODO: write what all these do
         height: int
           height of the image to be baked
         width: int
@@ -70,12 +74,16 @@ class TVMCompiler:
         self.tuner = tuner
         self.n_trial = n_trial
         self.early_stopping = early_stopping
-        self.use_transfer_learning: use_transfer_learning
-        self.thresh: thresh
-        self.measure_option: measure_option
-        
-
-
+        self.use_transfer_learning = use_transfer_learning
+        self.thresh = thresh
+        self.measure_option = measure_option
+        self.save_path = save_path
+        self.thresh = thresh
+        self.gpu = gpu
+        self.batch_size = batch_size
+        self.channels = channels
+        self.input_shape = [self.batch_size, self.channels, self.height, self.width]
+      
         # https://docs.tvm.ai/tutorials/autotvm/tune_nnvm_cuda.html#scale-up-measurement-by-using-multiple-devices
         #self.measure_option = autotvm.measure_option(
         #    builder=autotvm.LocalBuilder(timeout=10),
@@ -106,7 +114,7 @@ class TVMCompiler:
         params: dict
           the model's parameters
         '''
-        input_data = torch.randn([1, 3, self.height, self.width])
+        input_data = torch.randn(self.input_shape)
         # trace model   
         scripted_model = torch.jit.trace(model, input_data).eval()
         # create a relay
@@ -121,7 +129,7 @@ class TVMCompiler:
         self,
         model: Any,
         save_mods: bool = True
-    ) -> None
+    ) -> None:
         '''
         function to compile a model down to tvm
         Args:
@@ -132,28 +140,27 @@ class TVMCompiler:
         '''
         mod, params = self.relay(model)
         # compile the model 
-        lib = tvm_compile(mod, params)
+        lib = self.tvm_compile(mod, params)
         # export model
         lib.export_library(f"{self.save_path}.so")
-        with open(f"{self.save_path}.json") as fo:
+        with open(f"{self.save_path}.json", "w") as fo:
             fo.write(lib.get_graph_json())
-        with open(f"{self.save_path}.params") as fo:
+        with open(f"{self.save_path}.params", "wb") as fo:
             fo.write(relay.save_param_dict(lib.get_params()))
 
         # add whatever else you want here
         cpp_params = {
           "deploy_lib_path": f"{self.save_path}.so",
           "deploy_graph_path": f"{self.save_path}.json",
-          "deploy_param_path": f"{self.save_path}.params"),
+          "deploy_param_path": f"{self.save_path}.params",
           "device_id": 0,
           "width": self.width,
-          "height" self.height,
-          "gpu": False,
-          "tresh": thresh
+          "height": self.height,
+          "gpu": self.gpu,
+          "tresh": self.thresh
         }
-        with open(f"cpp.json") as fo:
+        with open(f"cpp.json", "w") as fo:
           json.dump(cpp_params, fo)
-
 
     def tvm_compile(
         self, 
@@ -186,6 +193,7 @@ class TVMCompiler:
         return lib
 
     def tune_graph(
+        self,
         graph: Function, 
         use_DP=True
     ) -> None:
@@ -202,8 +210,8 @@ class TVMCompiler:
         """
         target_op = [relay.op.get("nn.conv2d"),]
         Tuner = DPTuner if use_DP else PBQPTuner
-        executor = Tuner(graph, {'data': self.input_shapedshape}, self.log_filename, target_op, target)
-        executor.benchmark_layout_transform(min_exec_num=2000)
+        executor = Tuner(graph, {'data': self.input_shape}, self.log_filename, target_op, self.target)
+        # executor.benchmark_layout_transform(min_exec_num=self.n_trial)
         executor.run()
         executor.write_opt_sch2record_file(self.graph_opt_sch_file)
 
@@ -220,8 +228,8 @@ class TVMCompiler:
           the set of optimization task for the tvm compiler
 
         """
-        tmp_log_file = log_filename  + ".tmp"
-        tmp_task_log_file = log_filename + '.task.tmp'
+        tmp_log_file = self.log_filename  + ".tmp"
+        tmp_task_log_file = self.log_filename + '.task.tmp'
         if os.path.exists(tmp_log_file):
             os.remove(tmp_log_file)
 
@@ -289,30 +297,30 @@ class TVMCompiler:
 
     # https://discuss.tvm.ai/t/transfer-learning-doesnt-work-tuner-obj-load-history/5328/3
     # https://discuss.tvm.ai/t/solved-can-we-resume-an-autotuning-session/3329/6
-      def tune_and_evaluate(self):
-          """
-          this function tunes and compiles a model for deployment to a given target
-          """
-          # extract workloads from relay program
-          print("Extract tasks...")
-          # mod, params, input_shape, _ = get_network(network, batch_size=1)
-          tasks = autotvm.task.extract_from_program(
-              self.mod["main"], 
-              target=self.target,
-              params=self.params,
-              ops=(relay.op.get("nn.conv2d"),)
-          )
+    def tune_and_evaluate(self, model: Any) -> None:
+        """
+        this function tunes and compiles a model for deployment to a given target
+        """
+        # extract workloads from relay program
+        print("Extracting tasks...")
+        mod, params = self.relay(model, save_mods=True)
+        tasks = autotvm.task.extract_from_program(
+            self.mod["main"], 
+            target=self.target,
+            params=self.params,
+            ops=(relay.op.get("nn.conv2d"),)
+        )
 
-          # run tuning tasks
-          print("Tuning...")
-          tune_tasks(tasks)
-          tune_graph(self.mod["main"])
+        # run tuning tasks
+        print("Tuning...")
+        self.tune_tasks(tasks)
+        # self.tune_graph(self.mod["main"])
 
-          # compile kernels with history best records
-          with autotvm.apply_history_best(log_file):
-              print("Compile...")
-              self.tvm_compile(mod, params)
-            print("exported")
+        # compile kernels with history best records
+        with autotvm.apply_history_best(self.log_filename):
+            print("Compiling...")
+            self.tvm_compile(mod, params)
+            print("Exported!")
 
 if __name__ == '__main__':
 
@@ -330,10 +338,9 @@ if __name__ == '__main__':
         log_filename = 'cupidshufflenet_tvm.log',
         graph_opt_sch_file  = 'cupidshufflenet_tvm_graph_opt.log',
         tuner =  'xgb',
-        n_trial =  2000,
+        n_trial =  10,
         early_stopping =  None,
         use_transfer_learning =  True,
-        try_winograd =  True,
         measure_option = autotvm.measure_option(
             builder=autotvm.LocalBuilder(timeout=10),
             runner=autotvm.LocalRunner(
@@ -344,7 +351,7 @@ if __name__ == '__main__':
         )
     # export our model
     compiler.export(net, True)
-    # compiler.tune_and_evaluate()
+    # compiler.tune_and_evaluate(net)
 
 
 
