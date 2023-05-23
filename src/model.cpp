@@ -121,7 +121,7 @@ class CupidShuffle{
             image_width = model_config["image_width"];
             gpu = model_config["gpu"];
             n_classes = model_config["n_classes"];
-            no_nms_output_size[1] = model_config["n_dets"]
+            no_nms_output_size[1] = model_config["output_shape"]
             thresh = model_config["thresh"];
             total_input = 1 * 3 * image_width * image_width;
 
@@ -314,7 +314,7 @@ class CupidShuffle{
               get_output(0, model_output);
 
               // extract output from tvm
-              MatF yolo_output(6, n_dets, 1); //ulsMatF yolo_output(6, n_dets, 1);
+              MatF yolo_output(6, n_dets, 1);
               TVMArrayCopyToBytes(model_output, yolo_output.m_data, 1 * n_dets * 6 * sizeof(float));
 
               // perform nms
