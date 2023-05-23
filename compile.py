@@ -314,6 +314,8 @@ class TVMCompiler:
         # run tuning tasks
         print("Tuning...")
         self.tune_tasks(tasks)
+        # errors now, ridding until i can get it 
+        # to work
         # self.tune_graph(self.mod["main"])
 
         # compile kernels with history best records
