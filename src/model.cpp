@@ -98,7 +98,7 @@ class CupidShuffle{
         int n_classes;
         // each library has a max detections number and
         // this is the var needed
-        int64_t no_nms_output_size[3] = {1, 322560, 6};
+        int64_t model_output_shape[3] = {1, 322560, 6};
 
         int max_boxes = 100;
         /**
@@ -121,7 +121,7 @@ class CupidShuffle{
             image_width = model_config["image_width"];
             gpu = model_config["gpu"];
             n_classes = model_config["n_classes"];
-            no_nms_output_size[1] = model_config["output_shape"]
+            model_output_shape[1] = model_config["output_shape"]
             thresh = model_config["thresh"];
             total_input = 1 * 3 * image_width * image_width;
 
@@ -281,7 +281,7 @@ class CupidShuffle{
 
               // allocate memory for data
               TVMArrayAlloc(in_shape, in_ndim, dtype_code, dtype_bits, dtype_lanes, device_type, device_id, &input);
-              TVMArrayAlloc(no_nms_output_size, out_dim, d1ype_code, dtype_bits, dtype_lanes, device_type, device_id, &model_output);
+              TVMArrayAlloc(model_output_shape, out_dim, d1ype_code, dtype_bits, dtype_lanes, device_type, device_id, &model_output);
 
               //copy processed image to DLTensor
               cv::Mat processed_image = preprocess_image(frame, image_width, image_width, true);

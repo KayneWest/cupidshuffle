@@ -148,19 +148,6 @@ class TVMCompiler:
         with open(f"{self.save_path}.params", "wb") as fo:
             fo.write(relay.save_param_dict(lib.get_params()))
 
-
-        dtype = "float32"
-        m = graph_executor.GraphModule(lib["default"](dev))
-        # Set inputs
-        input_data = torch.randn(self.input_shape)
-        m.set_input(input_name, tvm.nd.array(input_data))
-        # Execute
-        m.run()
-        # Get outputs
-        tvm_output = m.get_output(0)
-
-
-
         # add whatever else you want here
         cpp_params = {
           "deploy_lib_path": f"{self.save_path}.so",
