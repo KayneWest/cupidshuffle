@@ -9,7 +9,7 @@ import tempfile
 import logging
 import json
 from time import time
-from typing import Dict, Tuple, Any, Optional, Union
+from typing import Dict, Tuple, Any, Optional, Union, List
 
 import torch
 import tvm
@@ -56,6 +56,8 @@ class TVMCompiler:
               min_repeat_ms=150, enable_cpu_cache_flush=True 
               )
             ),
+        output_shape: List = [1, 100],
+        n_classes: Union[int, None] = 100, 
     ) -> None:
         """
         TODO: write what all these do
@@ -83,6 +85,8 @@ class TVMCompiler:
         self.batch_size = batch_size
         self.channels = channels
         self.input_shape = [self.batch_size, self.channels, self.height, self.width]
+        self.output_shape = output_shape
+        self.n_classes = n_classes
       
         # https://docs.tvm.ai/tutorials/autotvm/tune_nnvm_cuda.html#scale-up-measurement-by-using-multiple-devices
         #self.measure_option = autotvm.measure_option(
@@ -128,7 +132,10 @@ class TVMCompiler:
     def export(
         self,
         model: Any,
-        save_mods: bool = True
+        save_mods: bool = True,
+        target: Union[Any, None] = None,
+        output_shape: Union[Any, None] = None,
+        n_classes: Union[int, None] = None, 
     ) -> None:
         '''
         function to compile a model down to tvm
@@ -137,10 +144,25 @@ class TVMCompiler:
         model: pytorch model
         save_mods: bool
           store the mod and params
+        target: the deployment target
+            can be sent manually, but usually a good idea
+            to set it on intialization
+        output_shape: the shape of the output
+            needed for setting the correct output for c++ deployment
+            manually set this in initalization or lazily call it here
+        n_classes: the number of classes of the model
+            some models will just be a feature vec or something so this
+            isn't always needed, but it will basically be the len of
+            the feature vector
         '''
+        if not target:
+            if not self.target:
+                raise Exception("please define a target in either the initialization or this function")
+            target = self.target
+
         mod, params = self.relay(model)
         # compile the model 
-        lib = self.tvm_compile(mod, params)
+        lib = self.tvm_compile(mod, params, target)
         # export model
         lib.export_library(f"{self.save_path}.so")
         with open(f"{self.save_path}.json", "w") as fo:
@@ -148,6 +170,34 @@ class TVMCompiler:
         with open(f"{self.save_path}.params", "wb") as fo:
             fo.write(relay.save_param_dict(lib.get_params()))
 
+        # run model through cpu to extract output-shape, 
+        # though, this should be known before hand
+        if not output_shape and not self.output_shape:
+            if not self.target:
+                raise Warning("using Lazy Target to find output_shape. if this is known please set `self.output_shape`")
+                lazy_target = tvm.target.Target('llvm', host='llvm') 
+            lazy_lib = self.tvm_compile(mod, params, target=lazy_target)
+            dev = tvm.cpu(0)
+            dtype = "float32"   
+            m = graph_executor.GraphModule(lib["default"](dev))
+            # Set inputs
+            input_data = torch.randn(self.input_shape)
+            m.set_input(input_name, tvm.nd.array(input_data))
+            # Execute
+            m.run()
+            # Get outputs
+            tvm_output = m.get_output(0)
+            output_shape = list(tvm_output.shape)
+            n_classes = tvm_output.shape[1]
+        elif not output_shape and self.output_shape:
+            output_shape = self.output_shape
+        #else: output_shape = outputshape
+
+        if not n_classes and not self.n_classes:
+            n_classes = max(output_shape)
+        elif not n_classes and self.n_classes:
+            n_classes = self.n_classes
+        
         # add whatever else you want here
         cpp_params = {
           "deploy_lib_path": f"{self.save_path}.so",
@@ -158,16 +208,17 @@ class TVMCompiler:
           "height": self.height,
           "gpu": self.gpu,
           "tresh": self.thresh,
-          "n_classes": tvm_output.shape[1],
-          "output_shape": list(tvm_output.shape) # this can be used in cpp for for correctly doing NMS
+          "n_classes": n_classes,
+          "output_shape": output_shape # this can be used in cpp for for correctly doing NMS
         }
         with open(f"cpp.json", "w") as fo:
           json.dump(cpp_params, fo)
 
     def tvm_compile(
-        self, 
+        self,
         mod: IRModule, 
         params: dict,
+        target: Union[Any, None] = None,
         opt_level: int = 3
     ) -> GraphExecutorFactoryModule:
         '''
@@ -178,6 +229,8 @@ class TVMCompiler:
           tvm IRModule
         params: dict
           the model's parameters
+        target: the compile target
+            usually set to self.target
         opt_level: int
           The optimization level of this pass.
         Returns:
@@ -185,11 +238,16 @@ class TVMCompiler:
         lib: tvm.relay.backend.executor_factory.GraphExecutorFactoryModule
           the compiled tvm lib
         '''
-        # compile the model 
+        # compile the model
+        if not target:
+            if not self.target:
+                raise Exception("please define a target in either the initialization or this function")
+            target = self.target
+        
         with tvm.transform.PassContext(opt_level=opt_level):
             lib = relay.build(
                 mod, 
-                target=self.target, 
+                target=target, 
                 params=params
             )
         return lib

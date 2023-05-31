@@ -95,7 +95,7 @@ class CupidShuffle{
         int total_input;
         int in_ndim = 4;
         int out_dim = 1;
-        int n_classes;
+        int n_classes = 100;
         // each library has a max detections number and
         // this is the var needed
         int64_t model_output_shape[3] = {1, 322560, 6};
