@@ -19,7 +19,7 @@ per https://pytorch.org/get-started/locally/
 
 and lastly
 
-    python -m pip install numpy tensorboard einops timm apache-tvm
+    python -m pip install numpy tensorboard einops timm apache-tvm chardet
 
 Now you should be able to run the following
 
